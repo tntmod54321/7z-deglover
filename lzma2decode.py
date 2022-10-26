@@ -15,8 +15,8 @@ import lzma
 
 def main():
     # infile = 'FF10.7z'
-    # infile = 'broken.7z'
-    infile = 'good.7z'
+    infile = 'broken.7z'
+    # infile = 'good.7z'
     
     with open(infile, 'rb') as f:
         arcBin = f.read()
@@ -41,6 +41,8 @@ def main():
         IS_COMPRESSED=None
         IS_NULL_CTRL=False
         headerSize=1
+        PACKET_TYPE=None
+        DICT_RESET=None
         
         # handle control byte
         if arcBin[packetOffset]==0:
@@ -48,9 +50,11 @@ def main():
         elif arcBin[packetOffset]>=3 and arcBin[packetOffset]<=0x7F:
             raise Exception('invalid lzma2 control-byte')       
         elif arcBin[packetOffset] in [1, 2]: # uncompressed chunk
-            # 1==dict reset, 2!=dict reset
+            if arcBin[packetOffset]==1: DICT_RESET=True
+            else: DICT_RESET=False
             IS_COMPRESSED=False
             headerSize+=2 # orig size uint16
+            PACKET_TYPE="UNCOMPRESSED_LZMA2"
             
             ORIG_CHUNK_SIZE=arcBin[packetOffset+1]
             ORIG_CHUNK_SIZE<<=8
@@ -65,6 +69,7 @@ def main():
         elif arcBin[packetOffset]>=0x80: # compressed lzma2 chunk
             IS_COMPRESSED=True
             headerSize+=4 # compressed and orig sizes
+            PACKET_TYPE="COMPRESSED_LZMA2"
             
             LZMA_STATE = (arcBin[packetOffset]&0b01100000)>>5 # 0-3
             # 0: nothing reset
@@ -94,12 +99,19 @@ def main():
                 packetEnd+=1
                 headerSize+=1
             
+            if LZMA_STATE==3: DICT_RESET=True
+            else: DICT_RESET=False
+            
         ### this is actually fucking awful, we should check if we're near the end of
         ### the size of this block/stream from the metadata header but ig idfc,
         ### I'm only planning to support 1 files anyway
         IS_LAST_CHUNK = footerOffset-packetEnd<=2
         if IS_NULL_CTRL and not IS_LAST_CHUNK:
             raise Exception('packet type LZMA1 or no data present')
+        
+        packetTypeStr=f'packet type:\t\t\t{PACKET_TYPE}'
+        if DICT_RESET: packetTypeStr+=', DICT_RESET'
+        print(packetTypeStr)
         
         ctrlByteStr=""
         for byte in arcBin[packetOffset:packetOffset+headerSize]:
@@ -122,20 +134,7 @@ def main():
         
         print(hex(packetEnd))
         
-        # if arcBin[packetEnd] == 0: # should be terminator"
-            # print(f"this packet is null terminated, {hex(packetEnd)}")
-            # print(f'terminator for packet {i} was expected but not present ({hex(packetEnd+0x20)})')
-            
-            # print(f'original bytecount: {totalBytes} bytes')
-            # raise Exception(f'Address {hex(packetEnd)} was not an expected null terminator byte')
-        
-        # print(hex(arcBin[packetOffset-3]))
-        # print(hex(arcBin[packetOffset-2]))
-        # print(hex(arcBin[packetOffset-1]))
-        # print(hex(arcBin[packetOffset]))
-        # print(hex(arcBin[packetOffset+1]))
-        # print(hex(arcBin[packetOffset+2]))
-        # print(hex(arcBin[packetOffset+3]))
+        ### take contents :>
         
         packetOffset = packetEnd+1
         # if i>=1: break
