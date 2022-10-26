@@ -37,7 +37,7 @@ def main():
         ORIG_CHUNK_SIZE=None
         COMPRESSED_CHUNK_SIZE=None
         PROPERTY_BYTE=None
-        IS_LAST_BYTE=None
+        IS_LAST_CHUNK=None
         IS_COMPRESSED=None
         IS_NULL_CTRL=False
         headerSize=1
@@ -97,8 +97,8 @@ def main():
         ### this is actually fucking awful, we should check if we're near the end of
         ### the size of this block/stream from the metadata header but ig idfc,
         ### I'm only planning to support 1 files anyway
-        IS_LAST_BYTE = len(arcBin[packetEnd+2:])<=len(arcBin[footerOffset:])
-        if IS_NULL_CTRL and not IS_LAST_BYTE:
+        IS_LAST_CHUNK = footerOffset-packetEnd<=2
+        if IS_NULL_CTRL and not IS_LAST_CHUNK:
             raise Exception('packet type LZMA1 or no data present')
         
         ctrlByteStr=""
@@ -139,7 +139,7 @@ def main():
         
         packetOffset = packetEnd+1
         # if i>=1: break
-        if IS_LAST_BYTE: break
+        if IS_LAST_CHUNK: break
         i+=1
         
         ### check if the start of the lzma data is ever not 0
