@@ -1,5 +1,15 @@
 import binascii
 import lzma
+import sys
+
+# update printhelp
+def printHelp():
+    print("Usage:", "py 7zdeglover.py -i [INPUT FILE] -o [OUTPUT FILE]\n\n"+
+    "Arguments:\n", "  -h, --help\tdisplay this usage info\n",
+    "  -i, -I\tinput .7z file\n",
+    "  -o, -O\toutput file\n",
+    "  -X\t\toverwrite output file if exists\n")
+    exit()
 
 # will decode valid lzma2 stream to bytes
 # print(lzma.decompress(arcStream[0x20:footerOffset], format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}]))
@@ -15,8 +25,23 @@ import lzma
 
 def main():
     # infile = 'FF10.7z'
-    infile = 'broken.7z'
+    # infile = 'broken.7z'
     # infile = 'good.7z'
+    
+    overwrite=False
+    infile=''
+    outfile=''
+    
+    if len(sys.argv[1:]) == 0: printHelp()
+    i=1 # for arguments like [--command value] get the value after the command
+    # first arg in sys.argv is the python file
+    for arg in sys.argv[1:]:
+        if (arg in ["help", "/?", "-h", "--help"]): printHelp()
+        if (arg in ["-i", "-I"]): infile = sys.argv[1:][i]
+        if (arg in ["-o", "-O"]): outfile = sys.argv[1:][i]
+        if (arg in ["-X"]): overwrite=True
+        i+=1
+    if '' in [infile, outfile]: printHelp()
     
     with open(infile, 'rb') as f:
         arcBin = f.read()
@@ -28,6 +53,8 @@ def main():
     footerOffset = int.from_bytes(arcBin[12:20], 'little')+0x20
     
     i=1
+    badBytes=0 ### use deez prease
+    badChunks=0 ###
     totalBytes=0
     packetOffset=0x20
     while True:
@@ -68,7 +95,7 @@ def main():
             
         elif arcBin[packetOffset]>=0x80: # compressed lzma2 chunk
             IS_COMPRESSED=True
-            headerSize+=4 # compressed and orig sizes
+            headerSize+=4 # compressed and orig uint16 sizes
             PACKET_TYPE="COMPRESSED_LZMA2"
             
             LZMA_STATE = (arcBin[packetOffset]&0b01100000)>>5 # 0-3
@@ -82,7 +109,7 @@ def main():
             ORIG_CHUNK_SIZE+=arcBin[packetOffset+1]
             ORIG_CHUNK_SIZE<<=8
             ORIG_CHUNK_SIZE+=arcBin[packetOffset+2]
-            ORIG_CHUNK_SIZE+=1 # size is stored -1
+            ORIG_CHUNK_SIZE+=1 # the size is stored -1
             
             totalBytes+=ORIG_CHUNK_SIZE
             
@@ -92,7 +119,7 @@ def main():
             COMPRESSED_CHUNK_SIZE+=1 # the size is stored -1
             
             packetEnd = packetOffset+4 # control byte and compressed/uncompressed sizes
-            packetEnd+=COMPRESSED_CHUNK_SIZE # plus the size of the actual chunk
+            packetEnd+=COMPRESSED_CHUNK_SIZE # plus the size of the actual data
             
             if LZMA_STATE>1:
                 PROPERTY_BYTE = arcBin[packetOffset+5]
@@ -104,7 +131,7 @@ def main():
             
         ### this is actually fucking awful, we should check if we're near the end of
         ### the size of this block/stream from the metadata header but ig idfc,
-        ### I'm only planning to support 1 files anyway
+        ### I'm only planning to support 1 files recovery anyway
         IS_LAST_CHUNK = footerOffset-packetEnd<=2
         if IS_NULL_CTRL and not IS_LAST_CHUNK:
             raise Exception('packet type LZMA1 or no data present')
@@ -136,14 +163,19 @@ def main():
         
         ### take contents :>
         
+        if i>=12:
+            packetBin=arcBin[0x20:packetEnd]
+            print(len(packetBin))
+            decompData = lzma.decompress(packetBin+b'\x00\x00', format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}])
+            with open(outfile, 'wb') as f:
+                f.write(decompData)
+            exit()    
+        
         packetOffset = packetEnd+1
-        # if i>=1: break
+        # if i>=10: break
         if IS_LAST_CHUNK: break
         i+=1
         
-        ### check if the start of the lzma data is ever not 0
-        ### make it properly detect the end of the file
-    
     print('\nexiting...') ###
     exit()
         
@@ -151,3 +183,12 @@ if __name__ == '__main__':
     main()
 
 ### PRs welcome
+
+### add sys arg command parsing owo
+### check if the start of the lzma data is ever not 0
+
+### stream chunks to outfile, maybe stream in the infile?
+### write undecodable data as 0xCD, printout ranges of bad data (mabey write to a doc alongside out file?)
+### try except the whole while loop and if excepts we write 0s and continue (instantiating a try except thingy is expensive right?)
+
+### read in bytes until next dict reset?

@@ -2,9 +2,8 @@ import sys
 from os import listdir, makedirs, system, remove, rmdir
 from os.path import isfile, isdir, splitext, split, join, exists
 
-# update printhelp
 def printHelp():
-    print("Usage:", "py wpd_save_post.py -u [POST URL] -o [OUTPUT DIR] -c cookies.txt\n\n"+
+    print("Usage:", "py 7zdeglover.py -i [INPUT FILE] -o [OUTPUT FILE]\n\n"+
     "Arguments:\n", "  -h, --help\tdisplay this usage info\n",
     "  -i, -I\tinput .7z file\n",
     "  -o, -O\toutput file\n",
