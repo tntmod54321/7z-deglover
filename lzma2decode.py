@@ -308,17 +308,18 @@ def main():
                     # get the index of the start of the damage,
                     # mark all packets as 'damaged' if a dict reset packet is damaged
                     damagedI=None
-                    for d in damagedPackets or damaged_dict:
-                        if d['damaged']==True:
+                    for d in damagedPackets:
+                        if d['damaged']==True or damaged_dict:
                             damagedI=d['run_index']
                             break
                     
                     recoveryBuf=b''
                     # decode the data pre-damage
-                    recoveryBuf+=lzma.decompress(
-                        damagedPackets[:damagedI][-1:][0]['packetRunBin']+b'\x00\x00',
-                        format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}]
-                    )
+                    if not damaged_dict:
+                        recoveryBuf+=lzma.decompress(
+                            damagedPackets[:damagedI][-1:][0]['packetRunBin']+b'\x00\x00',
+                            format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}]
+                        )
                     
                     # fill in the blanks or copy uncompressed data
                     for dpak in damagedPackets[damagedI:]:
@@ -348,7 +349,7 @@ def main():
                 print(f'compressed packet {packeti} was not readable - bytes {hex(outFstart)}-{hex(outFend)} of the output file were written as 0xCD.')
                 badBytes+=packet['uncompressed_size']
             else:
-                print(f'compressed packet {packeti} was in a run of damaged packets but was successfully decode - bytes {hex(outFstart)}-{hex(outFend)} of the output file were written with this data.')
+                print(f'compressed packet {packeti} was in a run of damaged packets but was successfully decoded - bytes {hex(outFstart)}-{hex(outFend)} of the output file were written with this data.')
         else:
             print(f'uncompressed packet {packeti} was written as-is - bytes {hex(outFstart)}-{hex(outFend)} of the original file, this data has not been verified.')
     
@@ -398,3 +399,10 @@ if __name__ == '__main__':
 
 ### can you read a block after a damaged one if there isn't a dict reset?
 ### answer: no, probably has some range thing, dk, I'm not using a custom lzma1 decoder
+
+### pls write a tiny doc on lzma2 in the readme
+
+### add an lzma2 packet size check
+
+### if the lzma2 index fails building you should try to go in with a hex editor
+### and manually change the address to point to the next packet
