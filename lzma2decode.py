@@ -1,6 +1,7 @@
 import binascii
 import lzma
 import sys
+import io
 
 # update printhelp
 def printHelp():
@@ -11,54 +12,16 @@ def printHelp():
     "  -X\t\toverwrite output file if exists\n")
     exit()
 
-# will decode valid lzma2 stream to bytes
-# print(lzma.decompress(arcStream[0x20:footerOffset], format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}]))
-
-# lzma.decompress(test, format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA1}])
-
-# LZMA2 packet for 0xFF*10
-# \xE0\x00\x0A\x00\x06\x5D\x00\x7F\xEB\xFC\x00\x00\x00\x00
-# lzma.decompress(b'\xE0\x00\x0A\x00\x06\x5D\x00\x7F\xEB\xFC\x00\x00\x00\x00', format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}])
-
-# LZMA1 data for 0xFF*10
-# \x00\x7F\xEB\xFC\x00\x00\x00
-
-def main():
-    # infile = 'FF10.7z'
-    # infile = 'broken.7z'
-    # infile = 'good.7z'
-    
-    overwrite=False
-    infile=''
-    outfile=''
-    
-    if len(sys.argv[1:]) == 0: printHelp()
-    i=1 # for arguments like [--command value] get the value after the command
-    # first arg in sys.argv is the python file
-    for arg in sys.argv[1:]:
-        if (arg in ["help", "/?", "-h", "--help"]): printHelp()
-        if (arg in ["-i", "-I"]): infile = sys.argv[1:][i]
-        if (arg in ["-o", "-O"]): outfile = sys.argv[1:][i]
-        if (arg in ["-X"]): overwrite=True
-        i+=1
-    if '' in [infile, outfile]: printHelp()
-    
-    with open(infile, 'rb') as f:
-        arcBin = f.read()
-    
-    # verify magic header
-    magicheader = arcBin[:6].hex().upper()
-    if magicheader != '377ABCAF271C': raise Exception('Input file is not a valid .7z file')
-    
-    footerOffset = int.from_bytes(arcBin[12:20], 'little')+0x20
+def buildLZMA2Index(fileOBJ, blockOffset=0x20,
+                    doPrintout=True, breakAfterX=0):
+    indicies=[]
     
     i=1
-    badBytes=0 ### use deez prease
-    badChunks=0 ###
     totalBytes=0
-    packetOffset=0x20
+    packetOffset=blockOffset
     while True:
-        print(f'\n{hex(packetOffset)}\t\t\tpacket {i}:')
+        if doPrintout:
+            print(f'\n{hex(packetOffset)}\t\t\tpacket {i}:')
         
         LZMA_STATE=None
         ORIG_CHUNK_SIZE=None
@@ -141,68 +104,97 @@ def main():
         if IS_NULL_CTRL and not IS_LAST_CHUNK:
             raise Exception('packet type LZMA1 or no data present')
         
-        packetTypeStr=f'packet type:\t\t\t{PACKET_TYPE}'
-        if DICT_RESET: packetTypeStr+=', DICT_RESET'
-        print(packetTypeStr)
-        
-        ctrlByteStr=""
-        for byte in arcBin[packetOffset:packetOffset+headerSize]:
-            Byte = hex(byte)[2:].upper()+' ' # skip '0x'
-            if len(Byte.strip())==1: Byte='0'+Byte
-            ctrlByteStr+=Byte
-        print(f'LZMA2 packet header:\t\t{ctrlByteStr}')
-        
-        print(f'uncompressed packet bytecount:\t{ORIG_CHUNK_SIZE} bytes')
-        if COMPRESSED_CHUNK_SIZE!=None:
-            print(f'compressed packet bytecount:\t{COMPRESSED_CHUNK_SIZE} bytes')
-        else:
-            print(f'compressed packet bytecount:\tN/A')
-        if IS_COMPRESSED==False:
-            print(f'packet state control flags:\tN/A')
-        else:
-            print(f'packet state control flags:\t{LZMA_STATE} ({bin(arcBin[packetOffset])})')
-        if PROPERTY_BYTE!=None: print(f'property state;\t\t\t{hex(PROPERTY_BYTE)}')
-        else:  print(f'property state;\t\t\tN/A')
-        
-        if not arcBin[packetOffset+headerSize:packetOffset+headerSize+1]==b'\x00' and  IS_COMPRESSED:
-            raise Exception('Weird! lzma data starting with something other than 0x00')
-        
-        ### take contents :>
-        print('packet last byte is', hex(LAST_BYTE))
-        print('start of next packet is', hex(arcBin[packetEnd+1]))
-        
-        print(hex(packetEnd))
-        
-        # if IS_LAST_CHUNK:
-        if i>=95:
-            # packetBin=arcBin[0x20:packetEnd+2]
-            packetBin=arcBin[0x20:packetEnd+1]
-            # print(hex(arcBin[packetEnd+1]))
-            # print('0x'+packetBin[-1:].hex())
-            # exit()
+        if doPrintout:
+            packetTypeStr=f'packet type:\t\t\t{PACKET_TYPE}'
+            if DICT_RESET: packetTypeStr+=', DICT_RESET'
+            print(packetTypeStr)
             
-            ## print(len(packetBin))
-            # decompData = lzma.decompress(packetBin+b'\x00\x00', format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}])
+            ctrlByteStr=""
+            for byte in arcBin[packetOffset:packetOffset+headerSize]:
+                Byte = hex(byte)[2:].upper()+' ' # skip '0x'
+                if len(Byte.strip())==1: Byte='0'+Byte
+                ctrlByteStr+=Byte
+            print(f'LZMA2 packet header:\t\t{ctrlByteStr}')
+            
+            print(f'uncompressed packet bytecount:\t{ORIG_CHUNK_SIZE} bytes')
+            if COMPRESSED_CHUNK_SIZE!=None:
+                print(f'compressed packet bytecount:\t{COMPRESSED_CHUNK_SIZE} bytes')
+            else:
+                print(f'compressed packet bytecount:\tN/A')
+            if IS_COMPRESSED==False:
+                print(f'packet state control flags:\tN/A')
+            else:
+                print(f'packet state control flags:\t{LZMA_STATE} ({bin(arcBin[packetOffset])})')
+            if PROPERTY_BYTE!=None: print(f'property state;\t\t\t{hex(PROPERTY_BYTE)}')
+            else:  print(f'property state;\t\t\tN/A')
+            
+            if not arcBin[packetOffset+headerSize:packetOffset+headerSize+1]==b'\x00' and  IS_COMPRESSED:
+                raise Exception('Weird! lzma data starting with something other than 0x00')
+            
+            print('packet last byte is', hex(LAST_BYTE))
+            print('start of next packet is', hex(arcBin[packetEnd+1]))
+            
+            print(hex(packetEnd))
+        
+        if breakAfterX>0 and breakAfterX>=i: # make this return uh somethin else idk
+            # break
+            packetBin=arcBin[0x20:packetEnd+1]
+            
             decompData = lzma.decompress(packetBin+b'\x00\x00', format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}])
             with open(outfile, 'wb') as f:
                 f.write(decompData)
+            import time
+            time.sleep(100)
             exit()
         
         packetOffset = packetEnd+1
-        # if i>=30: break
         if IS_LAST_CHUNK: break
         i+=1
+    
+    return
+
+def main():
+    overwrite=False
+    infile=''
+    outfile=''
+    
+    if len(sys.argv[1:]) == 0: printHelp()
+    i=1 # for arguments like [--command value] get the value after the command
+    # first arg in sys.argv is the python file
+    for arg in sys.argv[1:]:
+        if (arg in ["help", "/?", "-h", "--help"]): printHelp()
+        if (arg in ["-i", "-I"]): infile = sys.argv[1:][i]
+        if (arg in ["-o", "-O"]): outfile = sys.argv[1:][i]
+        if (arg in ["-X"]): overwrite=True
+        i+=1
+    if '' in [infile, outfile]: printHelp()
+    
+    with open(infile, 'rb') as f:
+        arcbuf = io.BufferedReader(f)
         
-    print('\nexiting...') ###
+        # verify magic header
+        if arcbuf.read(6) != bytes([0x37,0x7A,0xBC,0xAF,0x27,0x1C]):
+            raise Exception('Input file is not a valid .7z file')
+        
+        arcbuf.seek(12)
+        footerOffset = int.from_bytes(arcbuf.read(8), 'little')+0x20 # footer offset is from the end of the header
+        
+        arcbuf.seek(0)
+        index = buildLZMA2Index(arcbuf, doPrintout=True, breakAfterX=5)
+        
+        # badBytes=0
+        # badChunks=0
+        ### do stuff with the index
+        
+        exit()
+    
+    print('\nexiting...')
     exit()
         
 if __name__ == '__main__':
     main()
 
 ### PRs welcome
-
-### add sys arg command parsing owo
-### check if the start of the lzma data is ever not 0
 
 ### stream chunks to outfile, maybe stream in the infile?
 ### write undecodable data as 0xCD, printout ranges of bad data (mabey write to a doc alongside out file?)
@@ -215,3 +207,9 @@ if __name__ == '__main__':
 
 ### if block doesn't end with 00 we have to include the control byte for the next packet ?
 ### python lzma2 decoder est weird..
+
+### this script is not at all the full extent of what is possible in terms of recovery
+### should in theory be possible to find the problem byte by just observing the output and where it goes wrong
+### (assuming it's a bit flip or something)
+### should be easy with something like text or html, maybe not so much binary files but if it's something like
+### a video or image file it might be possible to tell at which point invalid data appears
