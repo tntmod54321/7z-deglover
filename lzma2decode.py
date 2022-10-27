@@ -67,9 +67,10 @@ def main():
         IS_LAST_CHUNK=None
         IS_COMPRESSED=None
         IS_NULL_CTRL=False
-        headerSize=1
+        headerSize=1 # control byte
         PACKET_TYPE=None
         DICT_RESET=None
+        LAST_BYTE=None
         
         # handle control byte
         if arcBin[packetOffset]==0:
@@ -92,6 +93,8 @@ def main():
             
             packetEnd=packetOffset+2 # control byte + uint16 size
             packetEnd+=ORIG_CHUNK_SIZE
+            
+            LAST_BYTE=arcBin[packetEnd]
             
         elif arcBin[packetOffset]>=0x80: # compressed lzma2 chunk
             IS_COMPRESSED=True
@@ -129,6 +132,8 @@ def main():
             if LZMA_STATE==3: DICT_RESET=True
             else: DICT_RESET=False
             
+            LAST_BYTE=arcBin[packetEnd]
+            
         ### this is actually fucking awful, we should check if we're near the end of
         ### the size of this block/stream from the metadata header but ig idfc,
         ### I'm only planning to support 1 files recovery anyway
@@ -159,20 +164,32 @@ def main():
         if PROPERTY_BYTE!=None: print(f'property state;\t\t\t{hex(PROPERTY_BYTE)}')
         else:  print(f'property state;\t\t\tN/A')
         
-        print(hex(packetEnd))
+        if not arcBin[packetOffset+headerSize:packetOffset+headerSize+1]==b'\x00' and  IS_COMPRESSED:
+            raise Exception('Weird! lzma data starting with something other than 0x00')
         
         ### take contents :>
+        print('packet last byte is', hex(LAST_BYTE))
+        print('start of next packet is', hex(arcBin[packetEnd+1]))
         
-        if i>=12:
-            packetBin=arcBin[0x20:packetEnd]
-            print(len(packetBin))
+        print(hex(packetEnd))
+        
+        # if IS_LAST_CHUNK:
+        if i>=95:
+            # packetBin=arcBin[0x20:packetEnd+2]
+            packetBin=arcBin[0x20:packetEnd+1]
+            # print(hex(arcBin[packetEnd+1]))
+            # print('0x'+packetBin[-1:].hex())
+            # exit()
+            
+            ## print(len(packetBin))
+            # decompData = lzma.decompress(packetBin+b'\x00\x00', format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}])
             decompData = lzma.decompress(packetBin+b'\x00\x00', format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}])
             with open(outfile, 'wb') as f:
                 f.write(decompData)
-            exit()    
+            exit()
         
         packetOffset = packetEnd+1
-        # if i>=10: break
+        # if i>=30: break
         if IS_LAST_CHUNK: break
         i+=1
         
@@ -192,3 +209,9 @@ if __name__ == '__main__':
 ### try except the whole while loop and if excepts we write 0s and continue (instantiating a try except thingy is expensive right?)
 
 ### read in bytes until next dict reset?
+
+### maybe generate an index then attempt shit from that?
+### try actually reading data from an arbitrary dict reset
+
+### if block doesn't end with 00 we have to include the control byte for the next packet ?
+### python lzma2 decoder est weird..
