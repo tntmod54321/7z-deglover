@@ -2,6 +2,7 @@ import binascii
 import lzma
 import sys
 import io
+from _lzma import LZMAError
 
 # update printhelp
 def printHelp():
@@ -36,6 +37,7 @@ def buildLZMA2Index(arcOBJ, blockEnd, blockOffset=0x20,
         DICT_RESET=None
         LAST_BYTE=None
         packetEnd=None
+        uncompressed_position=totalBytes
         
         arcOBJ.seek(packetOffset)
         control_byte = arcOBJ.read(1)[0]
@@ -158,7 +160,8 @@ def buildLZMA2Index(arcOBJ, blockEnd, blockOffset=0x20,
             'property_byte': PROPERTY_BYTE,
             
             'compressed_size': COMPRESSED_CHUNK_SIZE,
-            'uncompressed_size': COMPRESSED_CHUNK_SIZE,
+            'uncompressed_size': ORIG_CHUNK_SIZE,
+            'uncompressed_position': uncompressed_position,
             
             'packet_type': PACKET_TYPE,
             'last_byte': LAST_BYTE,
@@ -171,11 +174,6 @@ def buildLZMA2Index(arcOBJ, blockEnd, blockOffset=0x20,
         
         if breakAfterX>0 and breakAfterX<=i: # make this return uh somethin else idk
             break
-            # packetBin=arcBin[0x20:packetEnd+1]
-            
-            # decompData = lzma.decompress(packetBin+b'\x00\x00', format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}])
-            # with open(outfile, 'wb') as f:
-                # f.write(decompData)
         
         packetOffset = packetEnd+1
         if IS_LAST_PACKET: break
@@ -190,7 +188,7 @@ def main():
     infile=''
     outfile=''
     overwrite=False
-    getPackets=False
+    printPackets=False
     
     if len(sys.argv[1:]) == 0: printHelp()
     i=1 # for arguments like [--command value] get the value after the command
@@ -200,13 +198,14 @@ def main():
         if (arg in ["-i", "-I"]): infile = sys.argv[1:][i]
         if (arg in ["-o", "-O"]): outfile = sys.argv[1:][i]
         if (arg in ["-X"]): overwrite=True
-        if (arg in ["-P"]): getPackets=True
+        if (arg in ["-P"]): printPackets=True
         i+=1
     if '' in [infile, outfile]: printHelp()
     
     with open(infile, 'rb') as f:
         arcbuf = io.BufferedReader(f)
         
+        print('Verifying file type...')
         # verify magic header
         if arcbuf.read(6) != bytes([0x37,0x7A,0xBC,0xAF,0x27,0x1C]):
             raise Exception('Input file is not a valid .7z file')
@@ -216,26 +215,158 @@ def main():
         arcbuf.seek(12)
         footerOffset = int.from_bytes(arcbuf.read(8), 'little')+0x20 # footer offset is from the end of the header
         
+        print('Building LZMA2 index...')
         arcbuf.seek(0)
-        index, x = buildLZMA2Index(arcbuf, footerOffset, doPrintout=getPackets, breakAfterX=0)
-        if getPackets: exit()
+        packets, x = buildLZMA2Index(arcbuf, footerOffset, doPrintout=printPackets, breakAfterX=0)
+        if printPackets: exit()
         
-        badBytes=0
-        badPackets=0
+        # get list of runs of packets delimited by lzma dictionary resets
+        i=0
+        dictRuns=[]
+        lastDictReset=0
+        for packet in packets:
+            workingRange=[lastDictReset, i]
+            if packet['dict_reset'] or packet['is_last_packet']:
+                lastDictReset=i
+                if packet['is_last_packet']: workingRange[1]+=1
+                dictRuns.append(workingRange)
+            i+=1
+        
+        # for run in dictRuns:
+            # for i in range(run[0], run[1]):
+                # packet = packets[i]
+        
+        print('Decompressing input file to output file...')
+        badPackets=[]
         with open(outfile, 'wb') as o:
             outOBJ = io.BufferedWriter(o)
             
-            # try except lzmaerror
-            for packet in index:
-                print(packet)
-            
-        # dasasdasdasd
+            # for run in dictRuns[1:]: ############ remove dis later
+            for run in dictRuns: ############ remove dis later
+                runBuf=b''
+                packetCache=[]
+                
+                # cache the packet binaries
+                for packet in range(run[0], run[1]):
+                    packet = packets[packet]
+                    arcbuf.seek(packet['start'])
+                    
+                    packetCache.append(arcbuf.read(
+                        packet['end'] - packet['start'] + 1))
+                
+                try:
+                    runBuf = lzma.decompress(b''.join(packetCache)+b'\x00\x00', format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}])
+                except LZMAError as e:
+                    # format this runs packets into a format more suitable for attempting recovery
+                    i=0
+                    damagedPackets=[]
+                    for packet in range(run[0], run[1]):
+                        packet=packets[packet]
+                        
+                        packetBin = packetCache[i]
+                        packetRunBin=None
+                        if packet['is_compressed']:
+                            packetRunBin=packetCache[:i+1]
+                            packetRunBin=b''.join(packetRunBin)
+                        else:
+                            packetBin = packetBin[3:] # cut out LZMA2 header (control byte + uint16 size)
+                        
+                        tempPacket={
+                            'run_index': i,
+                            'packetMeta': packet,
+                            'packetBin': packetBin,
+                            'packetRunBin': packetRunBin,
+                            'damaged': None,
+                        }
+                        damagedPackets.append(tempPacket)
+                        i+=1
+                    
+                    if len(badPackets)==0: # only print this once
+                        print('damaged data found!\naffected packets:')
+                    
+                    # try to locate the damage
+                    damaged_dict=False
+                    for d in damagedPackets:
+                        if damaged_dict: break
+                        if d['packetMeta']['is_compressed']:
+                            try:
+                                lzma.decompress(d['packetRunBin']+b'\x00\x00', format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}])
+                                d['damaged']=False
+                            except LZMAError:
+                                d['damaged']=True
+                                # not sure how damaged blocks with property resests
+                                # will affect shit
+                                # if d['packetMeta']['dict_reset']: damaged_dict=True
+                                if d['packetMeta']['lzma_state'] != 0: damaged_dict=True
+                        else:
+                            d['damaged']=False
+                    
+                    for d in damagedPackets:
+                        # print(d['run_index'], d['damaged']) ###
+                        print(d['packetMeta'])
+                    
+                    # get the index of the start of the damage,
+                    # mark all packets as 'damaged' if a dict reset packet is damaged
+                    damagedI=None
+                    for d in damagedPackets or damaged_dict:
+                        if d['damaged']==True:
+                            damagedI=d['run_index']
+                            break
+                    
+                    recoveryBuf=b''
+                    # decode the data pre-damage
+                    recoveryBuf+=lzma.decompress(
+                        damagedPackets[:damagedI][-1:][0]['packetRunBin']+b'\x00\x00',
+                        format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}]
+                    )
+                    
+                    # fill in the blanks or copy uncompressed data
+                    for dpak in damagedPackets[damagedI:]:
+                        dpak['packetMeta']['damaged']=dpak['damaged']
+                        badPackets.append(dpak['packetMeta'])
+                        
+                        if dpak['packetMeta']['is_compressed']:
+                            recoveryBuf+=bytearray([0xCD]*dpak['packetMeta']['uncompressed_size'])
+                        else:
+                            recoveryBuf+=dpak['packetBin']
+                    
+                    runBuf = recoveryBuf
+                    pass
+                
+                
+                if len(runBuf)>0:
+                    outOBJ.write(runBuf)
     
-    print('\nexiting...')
+    print('\nReport:')
+    badBytes=0
+    for packet in badPackets:
+        packeti=packet['index']
+        outFstart=packet['uncompressed_position']
+        outFend=packet['uncompressed_size']+outFstart
+        if packet['is_compressed']:
+            if packet['damaged']:
+                print(f'compressed packet {packeti} was not readable - bytes {hex(outFstart)}-{hex(outFend)} of the output file were written as 0xCD.')
+                badBytes+=packet['uncompressed_size']
+            else:
+                print(f'compressed packet {packeti} was in a run of damaged packets but was successfully decode - bytes {hex(outFstart)}-{hex(outFend)} of the output file were written with this data.')
+        else:
+            print(f'uncompressed packet {packeti} was written as-is - bytes {hex(outFstart)}-{hex(outFend)} of the original file, this data has not been verified.')
+    
+    print(f'In total {badBytes} or more bytes are inaccurate to the original file ({round(badBytes/1024,2)}KiB)')
+    
+    print('\nFinished, exiting...')
     exit()
-        
+
 if __name__ == '__main__':
     main()
+
+
+# packetBin=arcBin[0x20:packetEnd+1]
+            
+# decompData = lzma.decompress(packetBin+b'\x00\x00', format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}])
+# with open(outfile, 'wb') as f:
+    # f.write(decompData)
+
 
 ### PRs welcome
 
@@ -256,3 +387,14 @@ if __name__ == '__main__':
 ### (assuming it's a bit flip or something)
 ### should be easy with something like text or html, maybe not so much binary files but if it's something like
 ### a video or image file it might be possible to tell at which point invalid data appears
+
+### add doc for print packets
+### tested only w/ python 3.9.5 on windows 10
+### the tool expects intact lzma2 packet headers, if they're damaged the
+### tool will probably spaz out, those are fixable manually so might be a good thing
+
+### tool will copy uncompressed blocks verbatim, without testing them in any way
+### probably possible to recover dictionary from damaged dict reset packet
+
+### can you read a block after a damaged one if there isn't a dict reset?
+### answer: no, probably has some range thing, dk, I'm not using a custom lzma1 decoder
