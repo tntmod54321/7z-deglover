@@ -264,11 +264,9 @@ def main():
                         packet=packets[packet]
                         
                         packetBin = packetCache[i]
-                        packetRunBin=None
-                        if packet['is_compressed']:
-                            packetRunBin=packetCache[:i+1]
-                            packetRunBin=b''.join(packetRunBin)
-                        else:
+                        packetRunBin=packetCache[:i+1]
+                        packetRunBin=b''.join(packetRunBin)
+                        if not packet['is_compressed']:
                             packetBin = packetBin[3:] # cut out LZMA2 header (control byte + uint16 size)
                         
                         tempPacket={
