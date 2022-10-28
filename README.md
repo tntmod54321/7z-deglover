@@ -1,5 +1,7 @@
 # 7z deglover
  Attempt to decode a single-block LZMA2-compressed .7z file
+ 
+### No warranty provided, no support guaranteed.
 
 # Usage
 ```
@@ -21,12 +23,15 @@ I was able to recover all 14 with this utility, less than 1MiB of data missing p
 
 # Limitations
 * doesn't attempt any LZMA1 repair
-* only reads one block/file; It's entirely possible to support extracting multiple blocks/files but when there's more than one file in the archive there's a metadata header/block/thing that has references to where all the data is, I just didn't implement reading it, the function to build the index of LZMA2 packets supports a custom offset. PRs welcome.
+* doesn't currently support non-lzma2 compressed data (might be possible?)
+* doesn't currently support archives with more than a single file inside
 
 # Improvements
 * Potentially repairing LZMA1 data where only a bit flip occured? may be possible to track down a problem to a single byte manually and attempt to correct it manually or by bruteforcing that byte until the packet passes the checksum (since one bad bit seems to affect the entire output of all of the data after it that approach should be viable...)  
 
 * Should be possible to automatically find LZMA2 packets admidst zeroed-out data, by searching for packets that start with a compressed LZMA2 control-byte (0b111XXXXX), checking for a 00 to indicate the start of the LZMA1 stream, and verifying that the compressed-length uint16 value (plus 1) points to another valid LZMA2 header.
+
+* only reads one block/file; It's entirely possible to support extracting multiple blocks/files but when there's more than one file in the archive there's a metadata header/block/thing that has references to where all the data is, I just didn't implement reading it, the function to build the index of LZMA2 packets supports a custom offset. PRs welcome.
 
 # Further references
 7zip/LZMA2 info
