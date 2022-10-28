@@ -1,9 +1,8 @@
 # 7z deglover
  Attempt to decode a single-block LZMA2-compressed .7z file
- 
-### No warranty provided, no support guaranteed.
 
 # Usage
+## No warranty provided, no support guaranteed.
 ```
 Usage: py 7z_deglover.py -i [INPUT FILE] -o [OUTPUT FILE]
 
@@ -31,7 +30,7 @@ I was able to recover all 14 with this utility, less than 1MiB of data missing p
 
 * Should be possible to automatically find LZMA2 packets admidst zeroed-out data, by searching for packets that start with a compressed LZMA2 control-byte (0b111XXXXX), checking for a 00 to indicate the start of the LZMA1 stream, and verifying that the compressed-length uint16 value (plus 1) points to another valid LZMA2 header.
 
-* only reads one block/file; It's entirely possible to support extracting multiple blocks/files but when there's more than one file in the archive there's a metadata header/block/thing that has references to where all the data is, I just didn't implement reading it, the function to build the index of LZMA2 packets supports a custom offset. PRs welcome.
+* Only reads one block/file; It's entirely possible to support extracting multiple blocks/files but when there's more than one file in the archive there's a metadata header/block/thing that has references to where all the data is, I just didn't implement reading it, the function to build the index of LZMA2 packets supports a custom offset. PRs welcome.
 
 # Further references
 7zip/LZMA2 info
