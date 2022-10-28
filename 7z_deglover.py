@@ -359,12 +359,8 @@ def main():
         else:
             print(f'uncompressed packet {packeti} was written as-is - bytes {hex(outFstart)}-{hex(outFend)} of the original file, this data has not been verified.')
     
-    skippedBytes=0
-    for skip in skips:
-        skippedBytes+=int(skip, 16)
-    
-    print(f'{skippedBytes} bytes were skipped using --skips')
-    print(f'In total {badBytes+skippedBytes} or more bytes are inaccurate to the original file ({round(badBytes/1024,2)}KiB)')
+    print(f'Some bytes were skipped using --skips')
+    print(f'In total {badBytes} or more bytes are inaccurate to the original file ({round(badBytes/1024,2)}KiB)')
     
     print('\nFinished, exiting...')
     exit()
@@ -372,54 +368,5 @@ def main():
 if __name__ == '__main__':
     main()
 
-
-# packetBin=arcBin[0x20:packetEnd+1]
-            
-# decompData = lzma.decompress(packetBin+b'\x00\x00', format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2}])
-# with open(outfile, 'wb') as f:
-    # f.write(decompData)
-
-
-### PRs welcome
-
-### stream chunks to outfile, maybe stream in the infile?
-### write undecodable data as 0xCD, printout ranges of bad data (mabey write to a doc alongside out file?)
-### try except the whole while loop and if excepts we write 0s and continue (instantiating a try except thingy is expensive right?)
-
-### read in bytes until next dict reset?
-
-### maybe generate an index then attempt shit from that?
-### try actually reading data from an arbitrary dict reset
-
-### if block doesn't end with 00 we have to include the control byte for the next packet ?
-### python lzma2 decoder est weird..
-
-### this script is not at all the full extent of what is possible in terms of recovery
-### should in theory be possible to find the problem byte by just observing the output and where it goes wrong
-### (assuming it's a bit flip or something)
-### should be easy with something like text or html, maybe not so much binary files but if it's something like
-### a video or image file it might be possible to tell at which point invalid data appears
-
-### add doc for print packets
-### tested only w/ python 3.9.5 on windows 10
-### the tool expects intact lzma2 packet headers, if they're damaged the
-### tool will probably spaz out, those are fixable manually so might be a good thing
-
-### tool will copy uncompressed blocks verbatim, without testing them in any way
-### probably possible to recover dictionary from damaged dict reset packet
-
 ### can you read a block after a damaged one if there isn't a dict reset?
 ### answer: no, probably has some range thing, dk, I'm not using a custom lzma1 decoder
-
-### pls write a tiny doc on lzma2 in the readme
-
-### add an lzma2 packet size check
-
-### if the lzma2 index fails building you should try to go in with a hex editor
-### and manually change the address to point to the next packet
-
-### -P to printout lzma2 packet headers for debug purposes
-
-### --skips 0x500
-### lpt: search 5D 00 (for properties byte+null)
-### py ../7z-lzma2-recover/lzma2decode.py -i "2019-07-22 16-32-20_recovered.mkv.7z" -o "2019-07-22 16-32-20_recovered.mkv" --skips 0xBF3C2

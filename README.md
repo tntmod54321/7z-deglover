@@ -30,18 +30,25 @@ I wrote this to try to recover 14 corrupted and compressed MKV files, 9 had bit 
 
 * Only reads one block/file; It's entirely possible to support extracting multiple blocks/files but when there's more than one file in the archive there's a metadata header/block/thing that has references to where all the data is, I just didn't implement reading it, the function to build the index of LZMA2 packets supports a custom offset. PRs welcome.
 
-# Further references
-7zip/LZMA2 info
-https://www.7-zip.org/recover.html
-https://www.nongnu.org/lzip/xz_inadequate.html#glossary
-https://sourceforge.net/p/sevenzip/discussion/45798/thread/e34b4a1d/?page=3
-https://en.wikipedia.org/wiki/Lempel%E2%80%93Ziv%E2%80%93Markov_chain_algorithm#LZMA2_format
+# LZMA2 crash course
+2 blocks compressed with LZMA2 and LZMA1 using 7zip 19.00
+LZMA2 = `E0 00 0A 00 06 5D 00 7F EB FC 00 00 00 00` == 0xFF*11
+LZMA1 = `                  00 7F EB FC 00 00 00   ` == 0xFF*11 
+That is the entirety of what makes up an LZMA2 packet AFAIK...
+The wikipedia page has more info, but here goes: the first bit indicates that the packet is compressed (control bytes over >0x80 are), the 2 bits after that are flags for property resets and dict resets, the following 5 bits and 2 bytes are the size of the data uncompressed minus one, the 2 bytes after that are the size of the compressed stream minus one, and finally a properties byte if the upper of the 2 properties bits was set, of course following the data stream there is a termination byte.
 
-LZMA decoders you could potentially use as a base for attempting more advanced recovery
-https://ionescu007.github.io/minLZMA/
-https://github.com/conor42/fast-LZMA2
+# Further references
+7zip/LZMA2 info  
+https://www.7-zip.org/recover.html  
+https://www.nongnu.org/lzip/xz_inadequate.html#glossary  
+https://sourceforge.net/p/sevenzip/discussion/45798/thread/e34b4a1d/?page=3  
+https://en.wikipedia.org/wiki/Lempel%E2%80%93Ziv%E2%80%93Markov_chain_algorithm#LZMA2_format  
+
+LZMA decoders you could potentially use as a base for attempting more advanced recovery  
+https://ionescu007.github.io/minLZMA/  
+https://github.com/conor42/fast-LZMA2  
 https://github.com/gendx/LZMA-rs  
-https://7-zip.org/sdk.html
+https://7-zip.org/sdk.html  
 
 # Example log
 ```
