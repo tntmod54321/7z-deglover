@@ -6,11 +6,12 @@ from _lzma import LZMAError
 
 # update printhelp
 def printHelp():
-    print("Usage:", "py 7zdeglover.py -i [INPUT FILE] -o [OUTPUT FILE]\n\n"+
+    print("Usage:", "py 7z_deglover.py -i [INPUT FILE] -o [OUTPUT FILE]\n\n"+
     "Arguments:\n", "  -h, --help\tdisplay this usage info\n",
-    "  -i, -I\tinput .7z file\n",
-    "  -o, -O\toutput file\n",
-    "  -X\t\toverwrite output file if exists\n")
+    "  -i\t\tinput .7z file\n",
+    "  -o\t\toutput file\n",
+    "  -P\t\tlist packet debug information about the provided input file\n",
+    "  --skips\tspecify skips in hex-csv format for skipping corrupted data while decoding a packet, E.G. --skips 0xC261FC3E,0x10FE58DF0\n")
     exit()
 
 # add footer offset for check?
@@ -198,7 +199,6 @@ def main():
     infile=''
     outfile=''
     skips=[]
-    overwrite=False
     printPackets=False
     
     if len(sys.argv[1:]) == 0: printHelp()
@@ -208,7 +208,6 @@ def main():
         if (arg in ["help", "/?", "-h", "--help"]): printHelp()
         if (arg in ["-i", "-I"]): infile = sys.argv[1:][i]
         if (arg in ["-o", "-O"]): outfile = sys.argv[1:][i]
-        if (arg in ["-X"]): overwrite=True
         if (arg in ["-P"]): printPackets=True
         if (arg in ["--skips"]): skips = sys.argv[1:][i].split(',')
         i+=1
