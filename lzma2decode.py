@@ -15,10 +15,11 @@ def printHelp():
 
 # add footer offset for check?
 def buildLZMA2Index(arcOBJ, blockEnd, blockOffset=0x20,
-               doPrintout=True, breakAfterX=0):
+               doPrintout=True, breakAfterX=0, skips=[]):
     indicies=[]
     
     i=1
+    skip_i=0
     totalBytes=0
     packetOffset=blockOffset
     while True:
@@ -46,7 +47,7 @@ def buildLZMA2Index(arcOBJ, blockEnd, blockOffset=0x20,
         if control_byte==0:
             IS_NULL_CTRL=True
         elif control_byte>=3 and control_byte<=0x7F:
-            raise Exception('invalid lzma2 control-byte')       
+            raise Exception(f'invalid lzma2 control-byte {hex(control_byte)} at {hex(packetOffset)}')       
         elif control_byte in [1, 2]: # uncompressed chunk
             if control_byte==1: DICT_RESET=True
             else: DICT_RESET=False
@@ -105,10 +106,19 @@ def buildLZMA2Index(arcOBJ, blockEnd, blockOffset=0x20,
             
             arcOBJ.seek(packetEnd)
             LAST_BYTE=arcOBJ.read(1)[0]
-            
-        IS_LAST_PACKET = blockEnd-packetEnd<=2
-        if IS_NULL_CTRL and not IS_LAST_PACKET:
-            raise Exception('packet type LZMA1 or no data present')
+        
+        try:
+            IS_LAST_PACKET = blockEnd-packetEnd<=2
+            if IS_NULL_CTRL and not IS_LAST_PACKET:
+                raise Exception('packet type LZMA1 or no data present')
+        except TypeError:
+            if skip_i>=len(skips) or len(skips)==0:
+                # skip to a specified address for the start of the next header
+                raise Exception(f'Error reading lzma2 packet header at {hex(packetOffset)}, try specifying a skip? Use -P to printout packet debug info')
+            print(f'using skip {skip_i} to skip from {hex(packetOffset)} to {hex(int(skips[skip_i], 16))}')
+            packetOffset=int(skips[skip_i], 16)
+            skip_i+=1
+            continue
         
         nextPackStart=None
         if not IS_LAST_PACKET:
@@ -187,6 +197,7 @@ def buildLZMA2Index(arcOBJ, blockEnd, blockOffset=0x20,
 def main():
     infile=''
     outfile=''
+    skips=[]
     overwrite=False
     printPackets=False
     
@@ -199,8 +210,11 @@ def main():
         if (arg in ["-o", "-O"]): outfile = sys.argv[1:][i]
         if (arg in ["-X"]): overwrite=True
         if (arg in ["-P"]): printPackets=True
+        if (arg in ["--skips"]): skips = sys.argv[1:][i].split(',')
         i+=1
     if '' in [infile, outfile]: printHelp()
+    
+    if infile==outfile: raise Exception('Don\'t try to write to the same file you dolt.')
     
     with open(infile, 'rb') as f:
         arcbuf = io.BufferedReader(f)
@@ -217,7 +231,7 @@ def main():
         
         print('Building LZMA2 index...')
         arcbuf.seek(0)
-        packets, x = buildLZMA2Index(arcbuf, footerOffset, doPrintout=printPackets, breakAfterX=0)
+        packets, x = buildLZMA2Index(arcbuf, footerOffset, doPrintout=printPackets, breakAfterX=0, skips=skips)
         if printPackets: exit()
         
         # get list of runs of packets delimited by lzma dictionary resets
@@ -232,17 +246,12 @@ def main():
                 dictRuns.append(workingRange)
             i+=1
         
-        # for run in dictRuns:
-            # for i in range(run[0], run[1]):
-                # packet = packets[i]
-        
         print('Decompressing input file to output file...')
         badPackets=[]
         with open(outfile, 'wb') as o:
             outOBJ = io.BufferedWriter(o)
             
-            # for run in dictRuns[1:]: ############ remove dis later
-            for run in dictRuns: ############ remove dis later
+            for run in dictRuns:
                 runBuf=b''
                 packetCache=[]
                 
@@ -351,7 +360,12 @@ def main():
         else:
             print(f'uncompressed packet {packeti} was written as-is - bytes {hex(outFstart)}-{hex(outFend)} of the original file, this data has not been verified.')
     
-    print(f'In total {badBytes} or more bytes are inaccurate to the original file ({round(badBytes/1024,2)}KiB)')
+    skippedBytes=0
+    for skip in skips:
+        skippedBytes+=int(skip, 16)
+    
+    print(f'{skippedBytes} bytes were skipped using --skips')
+    print(f'In total {badBytes+skippedBytes} or more bytes are inaccurate to the original file ({round(badBytes/1024,2)}KiB)')
     
     print('\nFinished, exiting...')
     exit()
@@ -404,3 +418,9 @@ if __name__ == '__main__':
 
 ### if the lzma2 index fails building you should try to go in with a hex editor
 ### and manually change the address to point to the next packet
+
+### -P to printout lzma2 packet headers for debug purposes
+
+### --skips 0x500
+### lpt: search 5D 00 (for properties byte+null)
+### py ../7z-lzma2-recover/lzma2decode.py -i "2019-07-22 16-32-20_recovered.mkv.7z" -o "2019-07-22 16-32-20_recovered.mkv" --skips 0xBF3C2
