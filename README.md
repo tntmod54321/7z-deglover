@@ -136,8 +136,8 @@ compressed packet 96761 was not readable - bytes 0x1659f8733-0x165a06b98 of the 
 uncompressed packet 96762 was written as-is - bytes 0x165a06b98-0x165a1488c of the original file, this data has not been verified.
 uncompressed packet 96763 was written as-is - bytes 0x165a1488c-0x165a22576 of the original file, this data has not been verified.
 compressed packet 96764 was not readable - bytes 0x165a22576-0x165a2f3a8 of the output file were written as 0xCD.
-7822871086 bytes were skipped using --skips
-In total 7823682158 or more bytes are inaccurate to the original file (792.06KiB)
+Some bytes were skipped using --skips
+In total 811072 or more bytes are inaccurate to the original file (792.00KiB)
 
 Finished, exiting...
 ```
