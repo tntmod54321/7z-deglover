@@ -17,6 +17,8 @@ Arguments:
 Works by indexing all of the LZMA2 packets and then skipping bad ones when decompressing, if the LZMA2 packet headers are damaged the user can specify locations to skip to.  
 
 I wrote this to try to recover 14 corrupted and compressed MKV files, 9 had bit flips and the other 5 had small swathes of data zeroed-out, I was able to recover all 14 with this utility, with 60KiB-1MiB of data missing per recovered file, a lot better than only being able to extract 1/3 before 7zip would crash...
+  
+PRs welcome.
 
 # Limitations
 * doesn't attempt any LZMA1 repair
@@ -28,7 +30,7 @@ I wrote this to try to recover 14 corrupted and compressed MKV files, 9 had bit 
 
 * Should be possible to automatically find LZMA2 packets admidst zeroed-out data, by searching for packets that start with a compressed LZMA2 control-byte (0b111XXXXX), checking for a 00 to indicate the start of the LZMA1 stream, and verifying that the compressed-length uint16 value (plus 1) points to another valid LZMA2 header.
 
-* Only reads one block/file; It's entirely possible to support extracting multiple blocks/files but when there's more than one file in the archive there's a metadata header/block/thing that has references to where all the data is, I just didn't implement reading it, the function to build the index of LZMA2 packets supports a custom offset. PRs welcome.
+* Only reads one block/file; It's entirely possible to support extracting multiple blocks/files but when there's more than one file in the archive there's a metadata header/block/thing that has references to where all the data is, I just didn't implement reading it, the function to build the index of LZMA2 packets supports a custom offset.
 
 # LZMA2 crash course
 2 blocks compressed with LZMA2 and LZMA1 using 7zip 19.00
