@@ -34,8 +34,8 @@ PRs welcome.
 
 # LZMA2 crash course
 2 blocks compressed with LZMA2 and LZMA1 using 7zip 19.00
-LZMA2 = `E0 00 0A 00 06 5D 00 7F EB FC 00 00 00 00` == 0xFF*11
-LZMA1 = `                  00 7F EB FC 00 00 00   ` == 0xFF*11 
+LZMA2 = `E0 00 0A 00 06 5D 00 7F EB FC 00 00 00 00` == 0xFF\*11
+LZMA1 = `                  00 7F EB FC 00 00 00   ` == 0xFF\*11 
 That is the entirety of what makes up an LZMA2 packet AFAIK...
 The wikipedia page has more info, but here goes: the first bit indicates that the packet is compressed (control bytes over >0x80 are), the 2 bits after that are flags for property resets and dict resets, the following 5 bits and 2 bytes are the size of the data uncompressed minus one, the 2 bytes after that are the size of the compressed stream minus one, and finally a properties byte if the upper of the 2 properties bits was set, of course following the data stream there is a termination byte.
 
