@@ -109,7 +109,8 @@ def buildLZMA2Index(arcOBJ, blockEnd, blockOffset=0x20,
             LAST_BYTE=arcOBJ.read(1)[0]
         
         try:
-            IS_LAST_PACKET = blockEnd-packetEnd<=2
+            if packetEnd != None:
+                IS_LAST_PACKET = blockEnd-packetEnd<=2
             if IS_NULL_CTRL and not IS_LAST_PACKET:
                 raise Exception('packet type LZMA1 or no data present')
         except TypeError:
